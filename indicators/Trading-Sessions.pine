@@ -26,8 +26,7 @@ nyHighLowColor = input.color(color.new(color.red, 50), title="New York High/Low 
 nyLabel = input.string("NEW YORK", title="New York Label", group="Labels")
 
 // Configuracion de Zona Horaria
-timezoneOptions = ["UTC", "EST", "EDT", "GMT", "CET", "CEST", "Custom"]
-timezoneMode = input.string("UTC", options=timezoneOptions, title="Timezone", group="Timezone")
+timezoneMode = input.string("UTC", options=["UTC", "EST", "EDT", "GMT", "CET", "CEST", "Custom"], title="Timezone", group="Timezone")
 customOffset = input.float(0, minval=-12, maxval=12, step=0.5, title="Custom Timezone Offset", group="Timezone")
 
 // Configuracion General
