@@ -1,0 +1,394 @@
+//@version=5
+indicator("CRT - Candle Range Theory", "CRT", overlay = true,
+     max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
+
+// ============================================================================
+// GENERAL
+// ============================================================================
+
+gG = "General"
+htfIn = input.timeframe("240", "Temporalidad del rango", group = gG,
+     tooltip = "Vela de referencia del CRT. D, 240 (H4) y 60 (H1) dan los rangos mas limpios. La temporalidad del grafico debe ser menor.")
+maxSetups = input.int(3, "Setups en pantalla", minval = 1, maxval = 20, group = gG,
+     tooltip = "Cuantos setups se mantienen dibujados. Menos = grafico mas limpio.")
+showFailed = input.bool(true, "Dejar marcados los setups invalidados", group = gG,
+     tooltip = "Apagado: se borran del grafico al invalidarse.")
+
+tf = htfIn == "" ? timeframe.period : htfIn
+
+// ============================================================================
+// FILTROS DE CALIDAD
+// ============================================================================
+// Cuanto mas exigentes, menos setups y grafico mas limpio.
+
+gF = "Filtros"
+oneSide = input.bool(true, "Solo barrida de un lado", group = gF,
+     tooltip = "Descarta la vela que barre el alto y el bajo del rango a la vez, donde la direccion es ambigua.")
+minSweep = input.float(2.0, "Barrida minima (% del rango)", minval = 0, maxval = 50, step = 0.5, group = gF,
+     tooltip = "La mecha tiene que pasar el nivel al menos este porcentaje del rango de la vela de referencia.")
+rejClose = input.bool(true, "Exigir cierre de rechazo", group = gF,
+     tooltip = "El cierre de la vela de manipulacion debe quedar en la mitad opuesta a la barrida.")
+minRR = input.float(0, "R:R minimo", minval = 0, step = 0.5, group = gF,
+     tooltip = "0 = sin filtro. Descarta el setup cuyo objetivo no alcance este multiplo del riesgo.")
+
+// ============================================================================
+// NIVELES
+// ============================================================================
+
+gN = "Niveles"
+entryMode = input.string("Nivel barrido", "Entrada",
+     options = ["Nivel barrido", "50% de la mecha", "Cierre de manipulacion"], group = gN,
+     tooltip = "Nivel barrido: retest del alto/bajo del rango. 50% de la mecha: mitad de la barrida. Cierre: entrada a mercado.")
+slBuf = input.float(0, "Colchon del stop (% del rango)", minval = 0, maxval = 20, step = 0.5, group = gN)
+showTgt = input.bool(true, "Linea de objetivo", group = gN)
+showEntry = input.bool(false, "Linea de entrada", group = gN)
+showStop = input.bool(false, "Linea de stop", group = gN)
+showRR = input.bool(false, "Etiqueta de R:R", group = gN)
+
+// ============================================================================
+// VISUAL
+// ============================================================================
+
+gV = "Visual"
+showBox = input.bool(true, "Caja del rango", group = gV)
+boxFill = input.bool(false, "Rellenar la caja", group = gV)
+fillOp = input.int(94, "Transparencia del relleno", minval = 70, maxval = 99, group = gV)
+showMark = input.bool(true, "Marcador de senal", group = gV)
+showSweep = input.bool(true, "Marcar la mecha de barrida", group = gV)
+showAMD = input.bool(false, "Etiquetas AMD", group = gV,
+     tooltip = "A = acumulacion (vela de rango), M = manipulacion (barrida), D = distribucion (entrada).")
+showTable = input.bool(false, "Panel de estado", group = gV)
+bullCol = input.color(#26A69A, "Alcista", group = gV, inline = "col")
+bearCol = input.color(#EF5350, "Bajista", group = gV, inline = "col")
+failCol = input.color(#78909C, "Invalidado", group = gV, inline = "col")
+
+// ============================================================================
+// CONSOLIDACION
+// ============================================================================
+// Modulo independiente del CRT: marca rangos laterales con al menos 3 toques
+// por lado. Apagado por defecto porque agrega ruido al grafico.
+
+gC = "Consolidacion"
+showConso = input.bool(false, "Detectar rangos de consolidacion", group = gC)
+consoLen = input.int(20, "Velas a evaluar", minval = 5, maxval = 200, group = gC)
+consoMult = input.float(1.5, "Ancho maximo (x ATR)", minval = 0.2, step = 0.1, group = gC)
+consoTol = input.float(12, "Tolerancia de toque (% del rango)", minval = 1, maxval = 50, group = gC)
+consoCol = input.color(#5C6BC0, "Color", group = gC)
+
+var color cNone = na
+
+// ============================================================================
+// ESTRUCTURA DE UN SETUP
+// ============================================================================
+
+type Setup
+    bool  bull   = false
+    bool  done   = false
+    float target = na
+    float stop   = na
+    box   bx     = na
+    line  tgtLn  = na
+    line  entLn  = na
+    line  stpLn  = na
+    line  swLn   = na
+    label la     = na
+    label lm     = na
+    label ld     = na
+    label lrr    = na
+
+killSetup(Setup s) =>
+    if not na(s.bx)
+        box.delete(s.bx)
+    if not na(s.tgtLn)
+        line.delete(s.tgtLn)
+    if not na(s.entLn)
+        line.delete(s.entLn)
+    if not na(s.stpLn)
+        line.delete(s.stpLn)
+    if not na(s.swLn)
+        line.delete(s.swLn)
+    if not na(s.la)
+        label.delete(s.la)
+    if not na(s.lm)
+        label.delete(s.lm)
+    if not na(s.ld)
+        label.delete(s.ld)
+    if not na(s.lrr)
+        label.delete(s.lrr)
+    true
+
+var array<Setup> setups = array.new<Setup>()
+
+// ============================================================================
+// DATOS DE LA VELA DE RANGO Y DE MANIPULACION
+// ============================================================================
+// [2] = vela de rango (referencia), [1] = vela de manipulacion (recien cerrada).
+// Con lookahead_off y desplazamiento explicito no hay repintado.
+
+[rH, rL, mH, mL, mC, hTime] = request.security(syminfo.tickerid, tf,
+     [high[2], low[2], high[1], low[1], close[1], time], lookahead = barmerge.lookahead_off)
+
+// Una vela nueva de la temporalidad superior implica que la anterior cerro.
+newHTF = not na(hTime) and not na(hTime[1]) and hTime != hTime[1]
+
+// ============================================================================
+// DETECCION
+// ============================================================================
+
+var int startCur  = 0
+var int startPrev = 0
+var int htfSeen   = 0
+var string lastSigTxt = "-"
+
+bool sigBull = false
+bool sigBear = false
+
+if newHTF
+    htfSeen += 1
+
+    // Posicion en barras del grafico de cada vela de la temporalidad superior.
+    rl0 = startPrev         // inicio de la vela de rango
+    rr0 = startCur - 1      // fin de la vela de rango
+    ms0 = startCur          // inicio de la vela de manipulacion
+    startPrev := startCur
+    startCur  := bar_index
+
+    rRange = rH - rL
+    ok = htfSeen >= 3 and rRange > 0 and not na(mC)
+
+    sweptHi = mH > rH
+    sweptLo = mL < rL
+    upWick  = mH - rH
+    dnWick  = rL - mL
+    minW    = rRange * minSweep / 100
+    mMid    = (mH + mL) / 2
+
+    // Barrida del alto con cierre de vuelta dentro del rango: sesgo bajista.
+    bearRaw = sweptHi and mC < rH and upWick >= minW and (not oneSide or not sweptLo) and (not rejClose or mC < mMid)
+    // Barrida del bajo con cierre de vuelta dentro del rango: sesgo alcista.
+    bullRaw = sweptLo and mC > rL and dnWick >= minW and (not oneSide or not sweptHi) and (not rejClose or mC > mMid)
+
+    // Si pasan las dos (solo posible con el filtro de un lado apagado) gana la
+    // mecha mas profunda.
+    cBear = bearRaw and (not bullRaw or upWick >= dnWick)
+    cBull = bullRaw and not (bearRaw and upWick >= dnWick)
+
+    if ok and (cBear or cBull)
+        isB = cBull
+        col = isB ? bullCol : bearCol
+        tgt = isB ? rH : rL
+        swx = isB ? mL : mH
+        buf = rRange * slBuf / 100
+        stp = isB ? swx - buf : swx + buf
+
+        float ent = isB ? rL : rH
+        if entryMode == "Cierre de manipulacion"
+            ent := mC
+        else if entryMode == "50% de la mecha"
+            ent := isB ? (rL + mL) / 2 : (rH + mH) / 2
+
+        risk  = math.abs(ent - stp)
+        rrVal = risk > 0 ? math.abs(tgt - ent) / risk : 0.0
+
+        if minRR <= 0 or rrVal >= minRR
+            s = Setup.new(bull = isB, target = tgt, stop = stp)
+
+            if showBox
+                s.bx := box.new(rl0, rH, rr0, rL, border_color = color.new(col, 25), border_width = 1,
+                     border_style = line.style_dotted, bgcolor = boxFill ? color.new(col, fillOp) : cNone)
+
+            if showSweep
+                s.swLn := line.new(ms0, swx, bar_index, swx, color = color.new(col, 35), width = 1)
+
+            if showTgt
+                s.tgtLn := line.new(rr0, tgt, bar_index, tgt, color = col, width = 1, style = line.style_dotted)
+
+            if showEntry
+                s.entLn := line.new(bar_index, ent, bar_index, ent, color = color.new(col, 45), width = 1,
+                     style = line.style_dashed)
+
+            if showStop
+                s.stpLn := line.new(bar_index, stp, bar_index, stp, color = color.new(failCol, 25), width = 1,
+                     style = line.style_dashed)
+
+            if showAMD
+                s.la := label.new(int((rl0 + rr0) / 2), (rH + rL) / 2, "A", style = label.style_none,
+                     textcolor = color.new(col, 25), size = size.tiny)
+                s.lm := label.new(int((ms0 + bar_index) / 2), swx, "M", style = label.style_none,
+                     textcolor = color.new(col, 25), size = size.tiny)
+                s.ld := label.new(bar_index, ent, "D", style = label.style_none,
+                     textcolor = color.new(col, 25), size = size.tiny)
+
+            if showRR
+                s.lrr := label.new(bar_index, tgt, str.tostring(rrVal, "#.0") + "R", style = label.style_none,
+                     textcolor = color.new(col, 25), size = size.tiny)
+
+            array.push(setups, s)
+            lastSigTxt := isB ? "Alcista" : "Bajista"
+            sigBull := isB
+            sigBear := not isB
+
+// Limita el historial dibujado.
+if array.size(setups) > maxSetups
+    for j = 1 to array.size(setups) - maxSetups
+        killSetup(array.shift(setups))
+
+// ============================================================================
+// SEGUIMIENTO DE LOS SETUPS ABIERTOS
+// ============================================================================
+// Las lineas se extienden mientras el setup esta vivo y se congelan al tocar
+// objetivo o stop. Asi el grafico solo muestra niveles todavia vigentes.
+
+bool hitBar  = false
+bool failBar = false
+
+if array.size(setups) > 0
+    for i = array.size(setups) - 1 to 0
+        s = array.get(setups, i)
+        if not s.done
+            hitStp = s.bull ? low <= s.stop : high >= s.stop
+            hitTgt = s.bull ? high >= s.target : low <= s.target
+
+            if hitStp
+                s.done := true
+                failBar := true
+                if showFailed
+                    if not na(s.tgtLn)
+                        line.set_x2(s.tgtLn, bar_index)
+                        line.set_color(s.tgtLn, color.new(failCol, 20))
+                        line.set_style(s.tgtLn, line.style_dashed)
+                    if not na(s.bx)
+                        box.set_border_color(s.bx, color.new(failCol, 35))
+                        box.set_bgcolor(s.bx, boxFill ? color.new(failCol, fillOp) : cNone)
+                    if not na(s.swLn)
+                        line.set_color(s.swLn, color.new(failCol, 45))
+                    if not na(s.entLn)
+                        line.set_x2(s.entLn, bar_index)
+                    if not na(s.stpLn)
+                        line.set_x2(s.stpLn, bar_index)
+                else
+                    killSetup(s)
+                    array.remove(setups, i)
+
+            else if hitTgt
+                s.done := true
+                hitBar := true
+                if not na(s.tgtLn)
+                    line.set_x2(s.tgtLn, bar_index)
+                if not na(s.entLn)
+                    line.set_x2(s.entLn, bar_index)
+                if not na(s.stpLn)
+                    line.set_x2(s.stpLn, bar_index)
+
+            else
+                if not na(s.tgtLn)
+                    line.set_x2(s.tgtLn, bar_index)
+                if not na(s.entLn)
+                    line.set_x2(s.entLn, bar_index)
+                if not na(s.stpLn)
+                    line.set_x2(s.stpLn, bar_index)
+
+// ============================================================================
+// CONSOLIDACION
+// ============================================================================
+
+var box   consoBx = na
+var float cTop    = na
+var float cBot    = na
+
+atr14 = ta.atr(14)
+cHi = ta.highest(consoLen)
+cLo = ta.lowest(consoLen)
+cRng = cHi - cLo
+cTol = cRng * consoTol / 100
+
+int tHi = 0
+int tLo = 0
+if showConso and cRng > 0
+    for k = 0 to consoLen - 1
+        if math.abs(high[k] - cHi) <= cTol
+            tHi += 1
+        if math.abs(low[k] - cLo) <= cTol
+            tLo += 1
+
+inConso = showConso and cRng > 0 and cRng <= atr14 * consoMult and tHi >= 3 and tLo >= 3
+
+if inConso
+    if na(consoBx)
+        cTop := cHi
+        cBot := cLo
+        consoBx := box.new(math.max(0, bar_index - consoLen + 1), cTop, bar_index, cBot,
+             border_color = color.new(consoCol, 40), border_width = 1, border_style = line.style_dashed,
+             bgcolor = cNone)
+    else
+        cTop := math.max(cTop, cHi)
+        cBot := math.min(cBot, cLo)
+        box.set_top(consoBx, cTop)
+        box.set_bottom(consoBx, cBot)
+        box.set_right(consoBx, bar_index)
+else
+    // Congela la caja al terminar la consolidacion.
+    consoBx := na
+
+// ============================================================================
+// MARCADORES Y ALERTAS
+// ============================================================================
+// plotshape y alertcondition solo funcionan en scope global.
+
+plotshape(showMark and sigBull, "CRT alcista", shape.triangleup, location.belowbar, bullCol, size = size.tiny)
+plotshape(showMark and sigBear, "CRT bajista", shape.triangledown, location.abovebar, bearCol, size = size.tiny)
+
+alertcondition(sigBull, "CRT alcista", "CRT alcista: barrida del bajo del rango y cierre de vuelta adentro")
+alertcondition(sigBear, "CRT bajista", "CRT bajista: barrida del alto del rango y cierre de vuelta adentro")
+alertcondition(sigBull or sigBear, "CRT en cualquier direccion", "Se formo un setup CRT")
+alertcondition(hitBar,  "Objetivo alcanzado", "Un setup CRT alcanzo su objetivo")
+alertcondition(failBar, "Setup invalidado", "Un setup CRT fue invalidado")
+
+// ============================================================================
+// PANEL DE ESTADO
+// ============================================================================
+
+int activeN = 0
+if array.size(setups) > 0
+    for i = 0 to array.size(setups) - 1
+        sx = array.get(setups, i)
+        if not sx.done
+            activeN += 1
+
+var table panel = na
+
+if showTable and barstate.islast
+    if na(panel)
+        panel := table.new(position.top_right, 2, 4, bgcolor = color.new(#131722, 20),
+             border_color = color.new(color.gray, 70), border_width = 1)
+
+    cTxt = color.new(color.white, 15)
+    table.cell(panel, 0, 0, "Rango CRT", text_color = cTxt, text_size = size.small)
+    table.cell(panel, 1, 0, tf, text_color = cTxt, text_size = size.small)
+    table.cell(panel, 0, 1, "Alto",  text_color = cTxt, text_size = size.small)
+    table.cell(panel, 1, 1, str.tostring(rH, format.mintick), text_color = cTxt, text_size = size.small)
+    table.cell(panel, 0, 2, "Bajo",  text_color = cTxt, text_size = size.small)
+    table.cell(panel, 1, 2, str.tostring(rL, format.mintick), text_color = cTxt, text_size = size.small)
+    table.cell(panel, 0, 3, "Ultima senal", text_color = cTxt, text_size = size.small)
+    table.cell(panel, 1, 3, lastSigTxt + " (" + str.tostring(activeN) + " activos)",
+         text_color = lastSigTxt == "Alcista" ? bullCol : lastSigTxt == "Bajista" ? bearCol : cTxt,
+         text_size = size.small)
+
+// ============================================================================
+// AVISO DE TEMPORALIDAD
+// ============================================================================
+// El CRT necesita que el grafico sea de menor temporalidad que la vela de rango.
+
+var label warn = na
+badTF = timeframe.in_seconds(timeframe.period) > timeframe.in_seconds(tf)
+
+if badTF and barstate.islast
+    if na(warn)
+        warn := label.new(bar_index, high, "El grafico es de temporalidad mayor que el rango CRT (" + tf + ")",
+             style = label.style_label_left, color = color.new(color.orange, 15), textcolor = color.white,
+             size = size.small)
+    else
+        label.set_xy(warn, bar_index, high)
+else if not na(warn)
+    label.delete(warn)
+    warn := na
