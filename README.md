@@ -1,107 +1,77 @@
-# Trading View Indicador 📊
+# Trading View Indicador
 
-Indicadores personalizados de Pine Script para TradingView con enfoque en sesiones de trading globales.
+Indicadores en Pine Script v5 para TradingView.
 
-## 🎯 Indicadores Disponibles
+## Trading Sessions
 
-### Trading Sessions
-Indicador que visualiza las principales sesiones de trading (Asia, Londres, Nueva York) con total configurabilidad.
+Marca las sesiones de Asia, Londres, Londres Close y Nueva York, con el rango
+(alto y bajo) de cada una.
 
-**Características:**
-- ✅ Marca las 3 sesiones principales: Asia, Londres, Nueva York
-- ✅ Horarios completamente configurables
-- ✅ Colores personalizables por sesión
-- ✅ Labels dinámicos para cada sesión
-- ✅ Background coloreado según la sesión activa
-- ✅ Alertas al cambiar de sesión
-- ✅ Interfaz intuitiva de inputs en TradingView
+### Qué dibuja
 
-## 📋 Configuración del Indicador
+- **Caja de rango**: una caja por sesión que se extiende mientras la sesión está
+  abierta y cierra exactamente en el alto y el bajo alcanzados.
+- **Líneas de alto y bajo**: se pueden proyectar hacia adelante una vez cerrada
+  la sesión, hasta que arranque la siguiente.
+- **Etiqueta** con el nombre de la sesión.
+- **Fondo coloreado** (opcional, apagado por defecto).
+- **Alertas** en la apertura de cada sesión.
 
-### Horarios por Defecto (en UTC)
-- **Asia:** 22:00 - 06:00 UTC
-- **Londres:** 07:00 - 15:00 UTC  
-- **Nueva York:** 13:00 - 21:00 UTC
+### Zona horaria
 
-> ⏰ Los horarios están configurados en UTC. Puedes ajustarlos según tu zona horaria en la configuración del indicador.
+El selector `Zona horaria` define en qué zona se interpretan los horarios:
 
-### Opciones Personalizables
+- `Exchange` — usa la zona horaria del gráfico (`syminfo.timezone`).
+- Zonas IANA: `UTC`, `America/New_York`, `Europe/London`, `Asia/Tokyo`,
+  `Europe/Berlin`, `America/Argentina/Buenos_Aires`.
 
-#### Session Times (Tiempos de Sesión)
-- `Asia Start` - Inicio de sesión Asia (default: 22:00 UTC)
-- `Asia End` - Fin de sesión Asia (default: 06:00 UTC)
-- `London Start` - Inicio de sesión Londres (default: 07:00 UTC)
-- `London End` - Fin de sesión Londres (default: 15:00 UTC)
-- `New York Start` - Inicio de sesión NY (default: 13:00 UTC)
-- `New York End` - Fin de sesión NY (default: 21:00 UTC)
+La detección usa `time(timeframe.period, sesión, zona)`, que maneja de forma
+nativa el horario de verano y las sesiones que cruzan medianoche. No hay offsets
+calculados a mano.
 
-#### Colors (Colores)
-- `Asia Color` - Color para sesión Asia (default: Azul)
-- `London Color` - Color para sesión Londres (default: Naranja)
-- `New York Color` - Color para sesión Nueva York (default: Rojo)
+### Horarios por defecto
 
-#### Labels (Etiquetas)
-- `Asia Label` - Texto para sesión Asia (default: "ASIA")
-- `London Label` - Texto para sesión Londres (default: "LONDON")
-- `New York Label` - Texto para sesión NY (default: "NEW YORK")
+Expresados en hora de Nueva York (`America/New_York`, el valor por defecto):
 
-#### Display (Visualización)
-- `Show Session Labels` - Mostrar/ocultar etiquetas
-- `Show Session Box` - Mostrar/ocultar background coloreado
-- `Label Size` - Tamaño de las etiquetas
+| Sesión        | Horario     |
+| ------------- | ----------- |
+| Asia          | 19:00–04:00 |
+| Londres       | 03:00–11:30 |
+| Londres Close | 10:00–12:00 |
+| Nueva York    | 08:00–17:00 |
 
-## 🚀 Cómo Usar
+Cada uno es editable con el selector de sesión de TradingView. El formato es
+`HHMM-HHMM`, y admite días (`0800-1700:23456` para lunes a viernes).
 
-### En TradingView:
+Las sesiones se solapan a propósito — Londres Close cae dentro de Nueva York.
+Cada una dibuja su propia caja, así que el solape se ve sin problema. El fondo
+coloreado, en cambio, solo puede mostrar un color a la vez: la prioridad es
+Londres Close → Londres → Asia → Nueva York.
 
-1. Abre TradingView.com
-2. Ve a **Pine Script Editor** (o **More** → **Pine Script Editor**)
-3. Copia el contenido del archivo `Trading-Sessions.pine`
-4. Pega el código en el editor
-5. Presiona **Add to Chart**
-6. Personaliza los valores según tus preferencias
+### Configuración
 
-### Convertir a Strategy (Opcional)
+Por sesión: activar/desactivar, horario, color de borde, color de relleno y
+etiqueta.
 
-Si deseas usar esto como base para una estrategia, puedes modificar la primera línea:
-```pine
-//@version=5
-strategy("Trading Sessions Strategy", overlay=true)
-```
+Globales: mostrar caja, mostrar líneas, extender líneas al cerrar, mostrar
+etiquetas, mostrar fondo, grosor de línea y tamaño de etiqueta.
 
-## 🎨 Ejemplos de Personalización
+### Uso
 
-### Cambiar Horarios a Horario de Nueva York (EST/EDT)
+1. En TradingView, abrir el **Pine Editor**.
+2. Pegar el contenido de `indicators/Trading-Sessions.pine`.
+3. **Add to chart**.
+4. Ajustar los parámetros desde el engranaje del indicador.
 
-En la configuración del indicador:
-- Asia Start: **17:00 EST**
-- London Start: **02:00 EST**
-- New York Start: **08:00 EST**
+## Notas de Pine Script v5
 
-### Usar Temas Corporativos
+Restricciones del lenguaje que condicionan cómo está escrito el indicador:
 
-- Asia: Verde (#26A69A)
-- Londres: Azul (#42A5F5)
-- Nueva York: Rojo (#EF5350)
-
-## 📝 Notas Importantes
-
-- ⏰ Los horarios cambiarán automáticamente según el cambio de horario de verano/invierno
-- 🔔 Las alertas se dispararán cuando cambies de sesión
-- 🎯 El indicador funciona en cualquier timeframe
-- 📊 Compatible con todos los pares de forex y otros activos
-
-## 📚 Recursos Útiles
-
-- [Documentación de Pine Script](https://www.tradingview.com/pine-script-docs/)
-- [Comunidad TradingView](https://www.tradingview.com/community/)
-- [Horarios de Sesiones de Trading](https://www.investopedia.com/articles/forex/08/forex-market-hours.asp)
-
-## 📄 Licencia
-
-Este proyecto está disponible para uso personal.
-
----
-
-**Versión:** 1.0.0  
-**Última actualización:** 2026-09-29
+- `bgcolor()`, `plot()`, `barcolor()`, `hline()` y `alertcondition()` solo se
+  pueden llamar en scope global, nunca dentro de un `if`. Para condicionarlas se
+  usa un ternario: `bgcolor(cond ? col : na)`.
+- El `message` de `alertcondition()` debe ser un string constante. Para mensajes
+  dinámicos hay que usar `alert()`, que sí acepta series.
+- No existe `math.fmod()`. El módulo es el operador `%`.
+- Un indicador necesita al menos una función de dibujo en scope global, o no
+  compila.
