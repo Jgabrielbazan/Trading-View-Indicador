@@ -2,67 +2,66 @@
 indicator("Trading Sessions", overlay=true, max_boxes_count=500, max_lines_count=500)
 
 // ============================================================================
-// CONFIGURACIÓN DE SESIONES
+// CONFIGURACION DE SESIONES
 // ============================================================================
 
 // Asia Session
-asiaStart = input.time(defval=timestamp("01 Jan 2020 22:00 +0000"), title="Asia Start", group="Session Times")
-asiaEnd = input.time(defval=timestamp("01 Jan 2020 06:00 +0000"), title="Asia End", group="Session Times")
 asiaColor = input.color(color.new(color.blue, 80), title="Asia Color", group="Colors")
 asiaHighLowColor = input.color(color.new(color.blue, 50), title="Asia High/Low Color", group="Colors")
 asiaLabel = input.string("ASIA", title="Asia Label", group="Labels")
 
 // London Session
-londonStart = input.time(defval=timestamp("01 Jan 2020 07:00 +0000"), title="London Start", group="Session Times")
-londonEnd = input.time(defval=timestamp("01 Jan 2020 15:00 +0000"), title="London End", group="Session Times")
 londonColor = input.color(color.new(color.orange, 80), title="London Color", group="Colors")
 londonHighLowColor = input.color(color.new(color.orange, 50), title="London High/Low Color", group="Colors")
 londonLabel = input.string("LONDON", title="London Label", group="Labels")
 
 // London Close Session
-londonCloseStart = input.time(defval=timestamp("01 Jan 2020 15:00 +0000"), title="London Close Start", group="Session Times")
-londonCloseEnd = input.time(defval=timestamp("01 Jan 2020 17:00 +0000"), title="London Close End", group="Session Times")
 londonCloseColor = input.color(color.new(color.yellow, 80), title="London Close Color", group="Colors")
 londonCloseHighLowColor = input.color(color.new(color.yellow, 50), title="London Close High/Low Color", group="Colors")
 londonCloseLabel = input.string("LONDON CLOSE", title="London Close Label", group="Labels")
 
 // New York Session
-nyStart = input.time(defval=timestamp("01 Jan 2020 13:00 +0000"), title="New York Start", group="Session Times")
-nyEnd = input.time(defval=timestamp("01 Jan 2020 21:00 +0000"), title="New York End", group="Session Times")
 nyColor = input.color(color.new(color.red, 80), title="New York Color", group="Colors")
 nyHighLowColor = input.color(color.new(color.red, 50), title="New York High/Low Color", group="Colors")
 nyLabel = input.string("NEW YORK", title="New York Label", group="Labels")
 
-// Configuración de Zona Horaria
-timezoneMode = input.string("UTC",
-                            options=["UTC", "EST (UTC-5)", "EDT (UTC-4)", "GMT (UTC+0)",
-                                    "CET (UTC+1)", "CEST (UTC+2)", "Custom Offset"],
-                            title="Timezone", group="Timezone")
-customOffset = input.float(0, minval=-12, maxval=12, step=0.5,
-                          title="Custom Timezone Offset (hours)", group="Timezone")
+// Configuracion de Zona Horaria
+timezoneOptions = ["UTC", "EST", "EDT", "GMT", "CET", "CEST", "Custom"]
+timezoneMode = input.string("UTC", options=timezoneOptions, title="Timezone", group="Timezone")
+customOffset = input.float(0, minval=-12, maxval=12, step=0.5, title="Custom Timezone Offset", group="Timezone")
 
-// Calcular offset basado en selección
-getTimezoneOffset() =>
-    switch timezoneMode
-        "UTC" => 0
-        "EST (UTC-5)" => -5
-        "EDT (UTC-4)" => -4
-        "GMT (UTC+0)" => 0
-        "CET (UTC+1)" => 1
-        "CEST (UTC+2)" => 2
-        "Custom Offset" => customOffset
-        => 0
-
-tzOffset = getTimezoneOffset()
-adjustedHour = (hour + tzOffset + 24) % 24
-
-// Configuración General
+// Configuracion General
 showSessionLabels = input.bool(true, title="Show Session Labels", group="Display")
 showSessionBox = input.bool(true, title="Show Session Box", group="Display")
 showHighLow = input.bool(true, title="Show High/Low Ranges", group="Display")
 highLowWidth = input.int(2, minval=1, maxval=5, title="High/Low Line Width", group="Display")
 labelSize = input.string(size.small, options=[size.tiny, size.small, size.normal, size.large, size.huge], title="Label Size", group="Display")
 showTimezoneLabel = input.bool(true, title="Show Timezone Info", group="Display")
+
+// ============================================================================
+// CALCULAR OFFSET DE ZONA HORARIA
+// ============================================================================
+
+getTimezoneOffset() =>
+    if timezoneMode == "UTC"
+        0
+    else if timezoneMode == "EST"
+        -5
+    else if timezoneMode == "EDT"
+        -4
+    else if timezoneMode == "GMT"
+        0
+    else if timezoneMode == "CET"
+        1
+    else if timezoneMode == "CEST"
+        2
+    else if timezoneMode == "Custom"
+        customOffset
+    else
+        0
+
+tzOffset = getTimezoneOffset()
+adjustedHour = math.fmod(hour + tzOffset + 24, 24)
 
 // ============================================================================
 // VARIABLES PARA TRACKING DE RANGOS
@@ -78,7 +77,7 @@ var nySessionHigh = high
 var nySessionLow = low
 
 // ============================================================================
-// FUNCIONES
+// FUNCIONES DE SESION
 // ============================================================================
 
 isAsiaSession() =>
@@ -118,7 +117,7 @@ getCurrentSessionLabel() =>
         "OFF HOURS"
 
 // ============================================================================
-// ACTUALIZAR HIGH/LOW DE CADA SESIÓN
+// ACTUALIZAR HIGH/LOW DE CADA SESION
 // ============================================================================
 
 if isAsiaSession()
@@ -157,25 +156,21 @@ if showSessionBox
     bgcolor(getCurrentSessionColor(), editable=false)
 
 // ============================================================================
-// DIBUJA CAJAS DE RANGO Y LÍNEAS HIGH/LOW
+// DIBUJA CAJAS DE RANGO Y LINEAS HIGH/LOW
 // ============================================================================
 
 if showHighLow
-    if isAsiaSession() and isAsiaSession()[1] == false
-        box.new(bar_index, asiaSessionHigh, bar_index, asiaSessionLow,
-               border_color=asiaHighLowColor, bgcolor=color.new(asiaHighLowColor, 95), border_width=highLowWidth)
+    if isAsiaSession() and not isAsiaSession()[1]
+        box.new(bar_index, asiaSessionHigh, bar_index, asiaSessionLow, border_color=asiaHighLowColor, bgcolor=color.new(asiaHighLowColor, 95), border_width=highLowWidth)
 
-    if isLondonSession() and isLondonSession()[1] == false
-        box.new(bar_index, londonSessionHigh, bar_index, londonSessionLow,
-               border_color=londonHighLowColor, bgcolor=color.new(londonHighLowColor, 95), border_width=highLowWidth)
+    if isLondonSession() and not isLondonSession()[1]
+        box.new(bar_index, londonSessionHigh, bar_index, londonSessionLow, border_color=londonHighLowColor, bgcolor=color.new(londonHighLowColor, 95), border_width=highLowWidth)
 
-    if isLondonCloseSession() and isLondonCloseSession()[1] == false
-        box.new(bar_index, londonCloseSessionHigh, bar_index, londonCloseSessionLow,
-               border_color=londonCloseHighLowColor, bgcolor=color.new(londonCloseHighLowColor, 95), border_width=highLowWidth)
+    if isLondonCloseSession() and not isLondonCloseSession()[1]
+        box.new(bar_index, londonCloseSessionHigh, bar_index, londonCloseSessionLow, border_color=londonCloseHighLowColor, bgcolor=color.new(londonCloseHighLowColor, 95), border_width=highLowWidth)
 
-    if isNYSession() and isNYSession()[1] == false
-        box.new(bar_index, nySessionHigh, bar_index, nySessionLow,
-               border_color=nyHighLowColor, bgcolor=color.new(nyHighLowColor, 95), border_width=highLowWidth)
+    if isNYSession() and not isNYSession()[1]
+        box.new(bar_index, nySessionHigh, bar_index, nySessionLow, border_color=nyHighLowColor, bgcolor=color.new(nyHighLowColor, 95), border_width=highLowWidth)
 
 // ============================================================================
 // DIBUJA LABELS
@@ -185,17 +180,13 @@ if showSessionLabels and barstate.islast
     y_position = high
 
     if isNYSession()
-        label.new(bar_index, y_position, nyLabel, xloc=xloc.bar_index, yloc=yloc.above,
-                 color=color.new(nyColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
+        label.new(bar_index, y_position, nyLabel, xloc=xloc.bar_index, yloc=yloc.above, color=color.new(nyColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
     else if isLondonCloseSession()
-        label.new(bar_index, y_position, londonCloseLabel, xloc=xloc.bar_index, yloc=yloc.above,
-                 color=color.new(londonCloseColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
+        label.new(bar_index, y_position, londonCloseLabel, xloc=xloc.bar_index, yloc=yloc.above, color=color.new(londonCloseColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
     else if isLondonSession()
-        label.new(bar_index, y_position, londonLabel, xloc=xloc.bar_index, yloc=yloc.above,
-                 color=color.new(londonColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
+        label.new(bar_index, y_position, londonLabel, xloc=xloc.bar_index, yloc=yloc.above, color=color.new(londonColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
     else if isAsiaSession()
-        label.new(bar_index, y_position, asiaLabel, xloc=xloc.bar_index, yloc=yloc.above,
-                 color=color.new(asiaColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
+        label.new(bar_index, y_position, asiaLabel, xloc=xloc.bar_index, yloc=yloc.above, color=color.new(asiaColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
 
 // ============================================================================
 // MUESTRA ZONA HORARIA ACTUAL
@@ -203,17 +194,13 @@ if showSessionLabels and barstate.islast
 
 if showTimezoneLabel and barstate.islast
     tzText = "TZ: " + timezoneMode
-    label.new(bar_index, low, tzText, xloc=xloc.bar_index, yloc=yloc.below,
-             color=color.new(color.gray, 20), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+    label.new(bar_index, low, tzText, xloc=xloc.bar_index, yloc=yloc.below, color=color.new(color.gray, 20), textcolor=color.white, style=label.style_label_up, size=size.tiny)
 
 // ============================================================================
 // ALERTS
 // ============================================================================
 
-sessionChanged = (isNYSession() and not isNYSession()[1]) or
-                 (isLondonCloseSession() and not isLondonCloseSession()[1]) or
-                 (isLondonSession() and not isLondonSession()[1]) or
-                 (isAsiaSession() and not isAsiaSession()[1])
+sessionChanged = (isNYSession() and not isNYSession()[1]) or (isLondonCloseSession() and not isLondonCloseSession()[1]) or (isLondonSession() and not isLondonSession()[1]) or (isAsiaSession() and not isAsiaSession()[1])
 
 if sessionChanged
     alert("Session Change: " + getCurrentSessionLabel())
