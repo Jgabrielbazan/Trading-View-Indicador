@@ -60,7 +60,7 @@ getTimezoneOffset() =>
         0
 
 tzOffset = getTimezoneOffset()
-adjustedHour = math.fmod(hour + tzOffset + 24, 24)
+adjustedHour = (hour + tzOffset + 24) % 24
 
 // ============================================================================
 // VARIABLES PARA TRACKING DE RANGOS
