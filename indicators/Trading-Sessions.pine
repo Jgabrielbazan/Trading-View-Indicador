@@ -201,5 +201,4 @@ if showTimezoneLabel and barstate.islast
 
 sessionChanged = (isNYSession() and not isNYSession()[1]) or (isLondonCloseSession() and not isLondonCloseSession()[1]) or (isLondonSession() and not isLondonSession()[1]) or (isAsiaSession() and not isAsiaSession()[1])
 
-if sessionChanged
-    alert("Session Change: " + getCurrentSessionLabel())
+alertcondition(sessionChanged, title="Session Change Alert", message="Session Changed to: " + getCurrentSessionLabel())
