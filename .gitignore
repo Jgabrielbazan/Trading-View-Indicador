@@ -1,0 +1,36 @@
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+.sublime-project
+.sublime-workspace
+
+# Temporal files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+
+# Logs
+*.log
+logs/
+
+# Dependencies (if using Node.js or Python utilities)
+node_modules/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Build output
+dist/
+build/

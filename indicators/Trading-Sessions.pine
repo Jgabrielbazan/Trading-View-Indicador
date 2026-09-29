@@ -1,0 +1,97 @@
+//@version=5
+indicator("Trading Sessions", overlay=true)
+
+// ============================================================================
+// CONFIGURACIÓN DE SESIONES
+// ============================================================================
+
+// Asia Session
+asiaStart = input.time(defval=timestamp("01 Jan 2020 22:00 +0000"), title="Asia Start", group="Session Times")
+asiaEnd = input.time(defval=timestamp("01 Jan 2020 06:00 +0000"), title="Asia End", group="Session Times")
+asiaColor = input.color(color.new(color.blue, 80), title="Asia Color", group="Colors")
+asiaLabel = input.string("ASIA", title="Asia Label", group="Labels")
+
+// London Session
+londonStart = input.time(defval=timestamp("01 Jan 2020 07:00 +0000"), title="London Start", group="Session Times")
+londonEnd = input.time(defval=timestamp("01 Jan 2020 15:00 +0000"), title="London End", group="Session Times")
+londonColor = input.color(color.new(color.orange, 80), title="London Color", group="Colors")
+londonLabel = input.string("LONDON", title="London Label", group="Labels")
+
+// New York Session
+nyStart = input.time(defval=timestamp("01 Jan 2020 13:00 +0000"), title="New York Start", group="Session Times")
+nyEnd = input.time(defval=timestamp("01 Jan 2020 21:00 +0000"), title="New York End", group="Session Times")
+nyColor = input.color(color.new(color.red, 80), title="New York Color", group="Colors")
+nyLabel = input.string("NEW YORK", title="New York Label", group="Labels")
+
+// Configuración General
+showSessionLabels = input.bool(true, title="Show Session Labels", group="Display")
+showSessionBox = input.bool(true, title="Show Session Box", group="Display")
+labelSize = input.string(size.small, options=[size.tiny, size.small, size.normal, size.large, size.huge], title="Label Size", group="Display")
+
+// ============================================================================
+// FUNCIONES
+// ============================================================================
+
+isAsiaSession() =>
+    hour >= 22 or hour < 6
+
+isLondonSession() =>
+    hour >= 7 and hour < 15
+
+isNYSession() =>
+    hour >= 13 and hour < 21
+
+getSessionColor() =>
+    if isNYSession()
+        nyColor
+    else if isLondonSession()
+        londonColor
+    else if isAsiaSession()
+        asiaColor
+    else
+        color.new(color.gray, 90)
+
+getSessionLabel() =>
+    if isNYSession()
+        nyLabel
+    else if isLondonSession()
+        londonLabel
+    else if isAsiaSession()
+        asiaLabel
+    else
+        "OFF HOURS"
+
+// ============================================================================
+// DIBUJA BACKGROUND
+// ============================================================================
+
+if showSessionBox
+    bgcolor(getSessionColor(), editable=false)
+
+// ============================================================================
+// DIBUJA LABELS
+// ============================================================================
+
+if showSessionLabels and barstate.islast
+    y_position = high
+
+    if isNYSession()
+        label.new(bar_index, y_position, nyLabel, xloc=xloc.bar_index, yloc=yloc.above,
+                 color=color.new(nyColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
+    else if isLondonSession()
+        label.new(bar_index, y_position, londonLabel, xloc=xloc.bar_index, yloc=yloc.above,
+                 color=color.new(londonColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
+    else if isAsiaSession()
+        label.new(bar_index, y_position, asiaLabel, xloc=xloc.bar_index, yloc=yloc.above,
+                 color=color.new(asiaColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
+
+// ============================================================================
+// ALERTS (Opcional)
+// ============================================================================
+
+sessionChanged = (isNYSession() and not isNYSession()[1]) or
+                 (isLondonSession() and not isLondonSession()[1]) or
+                 (isAsiaSession() and not isAsiaSession()[1])
+
+if sessionChanged
+    alert("Session Change: " + getSessionLabel())
