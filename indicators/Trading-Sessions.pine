@@ -1,11 +1,9 @@
 //@version=5
-indicator("Trading Sessions", overlay = true, max_boxes_count = 500, max_lines_count = 500)
+indicator("Trading Sessions", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
 
 // ============================================================================
 // ZONA HORARIA
 // ============================================================================
-// "Exchange" usa la zona horaria del grafico (syminfo.timezone).
-// Las demas son zonas IANA: los horarios de abajo se interpretan en esa zona.
 
 tzMode = input.string("America/New_York", title = "Zona horaria",
      options = ["Exchange", "UTC", "America/New_York", "Europe/London", "Asia/Tokyo", "Europe/Berlin", "America/Argentina/Buenos_Aires"],
@@ -16,55 +14,60 @@ tz = tzMode == "Exchange" ? syminfo.timezone : tzMode
 // ============================================================================
 // SESIONES
 // ============================================================================
-// Horarios por defecto expresados en hora de Nueva York.
 
 gAsia = "Asia"
-asiaShow   = input.bool(true, "Activar", group = gAsia)
-asiaSess   = input.session("1900-0400", "Horario", group = gAsia)
-asiaBorder = input.color(color.new(#2962FF, 0),  "Borde / lineas", group = gAsia, inline = "asiaC")
-asiaFill   = input.color(color.new(#2962FF, 88), "Relleno",        group = gAsia, inline = "asiaC")
-asiaTxt    = input.string("ASIA", "Etiqueta", group = gAsia)
+asiaShow = input.bool(true, "Activar", group = gAsia, inline = "a1")
+asiaCol  = input.color(#5C6BC0, "", group = gAsia, inline = "a1")
+asiaSess = input.session("1900-0400", "Horario", group = gAsia)
+asiaTxt  = input.string("ASIA", "Etiqueta", group = gAsia)
 
 gLon = "Londres"
-lonShow   = input.bool(true, "Activar", group = gLon)
-lonSess   = input.session("0300-1130", "Horario", group = gLon)
-lonBorder = input.color(color.new(#FF9800, 0),  "Borde / lineas", group = gLon, inline = "lonC")
-lonFill   = input.color(color.new(#FF9800, 88), "Relleno",        group = gLon, inline = "lonC")
-lonTxt    = input.string("LONDON", "Etiqueta", group = gLon)
+lonShow = input.bool(true, "Activar", group = gLon, inline = "l1")
+lonCol  = input.color(#26A69A, "", group = gLon, inline = "l1")
+lonSess = input.session("0300-1130", "Horario", group = gLon)
+lonTxt  = input.string("LONDON", "Etiqueta", group = gLon)
 
 gLC = "Londres Close"
-lcShow   = input.bool(true, "Activar", group = gLC)
-lcSess   = input.session("1000-1200", "Horario", group = gLC)
-lcBorder = input.color(color.new(#FFEB3B, 0),  "Borde / lineas", group = gLC, inline = "lcC")
-lcFill   = input.color(color.new(#FFEB3B, 88), "Relleno",        group = gLC, inline = "lcC")
-lcTxt    = input.string("LONDON CLOSE", "Etiqueta", group = gLC)
+lcShow = input.bool(true, "Activar", group = gLC, inline = "c1")
+lcCol  = input.color(#FFA726, "", group = gLC, inline = "c1")
+lcSess = input.session("1000-1200", "Horario", group = gLC)
+lcTxt  = input.string("LDN CLOSE", "Etiqueta", group = gLC)
 
 gNY = "Nueva York"
-nyShow   = input.bool(true, "Activar", group = gNY)
-nySess   = input.session("0800-1700", "Horario", group = gNY)
-nyBorder = input.color(color.new(#F23645, 0),  "Borde / lineas", group = gNY, inline = "nyC")
-nyFill   = input.color(color.new(#F23645, 88), "Relleno",        group = gNY, inline = "nyC")
-nyTxt    = input.string("NEW YORK", "Etiqueta", group = gNY)
+nyShow = input.bool(true, "Activar", group = gNY, inline = "n1")
+nyCol  = input.color(#EF5350, "", group = gNY, inline = "n1")
+nySess = input.session("0800-1700", "Horario", group = gNY)
+nyTxt  = input.string("NEW YORK", "Etiqueta", group = gNY)
 
 // ============================================================================
-// VISUALIZACION
+// ESTILO
 // ============================================================================
 
-gDisp = "Visualizacion"
-showBox    = input.bool(true,  "Caja del rango (alto/bajo)", group = gDisp)
-showLines  = input.bool(true,  "Lineas de alto y bajo",      group = gDisp)
-extendLine = input.bool(true,  "Extender lineas al cerrar la sesion", group = gDisp)
-showLabels = input.bool(true,  "Etiquetas de sesion",        group = gDisp)
-showBg     = input.bool(false, "Fondo coloreado",            group = gDisp)
-lineWidth  = input.int(1, "Grosor de linea", minval = 1, maxval = 5, group = gDisp)
-lblSize    = input.string(size.small, "Tamano de etiqueta",
-     options = [size.tiny, size.small, size.normal, size.large], group = gDisp)
+gS = "Estilo"
+maxDays     = input.int(5, "Dias de historial", minval = 1, maxval = 90, group = gS,
+     tooltip = "Solo dibuja las sesiones de los ultimos N dias. Menos dias = grafico mas limpio.")
+showFill    = input.bool(false, "Rellenar la caja", group = gS)
+fillOpacity = input.int(93, "Transparencia del relleno", minval = 70, maxval = 99, group = gS)
+borderStyle = input.string("Punteado", "Borde de la caja", options = ["Solido", "Punteado", "Rayado"], group = gS)
+showLevels  = input.bool(true, "Proyectar alto y bajo al cerrar", group = gS)
+showLabels  = input.bool(true, "Etiquetas", group = gS)
+labelChip   = input.bool(false, "Etiqueta con fondo", group = gS,
+     tooltip = "Apagado: solo el texto, mas limpio. Encendido: chip de color.")
+lblSize     = input.string(size.tiny, "Tamano de etiqueta",
+     options = [size.tiny, size.small, size.normal], group = gS)
+
+bStyle = borderStyle == "Solido" ? line.style_solid : borderStyle == "Punteado" ? line.style_dotted : line.style_dashed
+
+var color cNone = na
+
+// Limita el dibujo a las ultimas N jornadas para no saturar el grafico.
+inWindow = (timenow - time) <= maxDays * 86400000.0
 
 // ============================================================================
 // DETECCION DE SESION
 // ============================================================================
-// time() devuelve na fuera de la sesion. Maneja cruces de medianoche y zona
-// horaria de forma nativa, por eso no hace falta calcular offsets a mano.
+// time() devuelve na fuera de la sesion. Maneja cruces de medianoche, dias no
+// operativos y horario de verano de forma nativa.
 
 inSession(sess) =>
     not na(time(timeframe.period, sess, tz))
@@ -77,38 +80,39 @@ nyOn   = nyShow   and inSession(nySess)
 // ============================================================================
 // DIBUJO DE UNA SESION
 // ============================================================================
-// Cada llamada a esta funcion mantiene su propio estado: en Pine, las variables
-// declaradas con `var` dentro de una funcion son independientes por cada lugar
-// desde donde se la llama.
+// Durante la sesion se dibuja solo la caja: su borde superior es el alto y el
+// inferior el bajo, asi que ya marca el rango. Recien al cerrar la sesion se
+// crean las lineas, que proyectan esos dos niveles hacia adelante.
+//
+// Cada llamada mantiene su propio estado: las variables `var` dentro de una
+// funcion son independientes por cada lugar desde donde se la llama.
 
-drawSession(active, cBorder, cFill, name) =>
-    var box   bx    = na
-    var line  hiLn  = na
-    var line  loLn  = na
-    var label lbl   = na
-    var float hi    = na
-    var float lo    = na
+drawSession(active, col, name) =>
+    var box   bx     = na
+    var line  hiLn   = na
+    var line  loLn   = na
+    var label lbl    = na
+    var float hi     = na
+    var float lo     = na
     var int   xStart = na
 
     starting = active and not active[1]
     running  = active and active[1]
+    ending   = not active and active[1]
 
     if starting
         hi := high
         lo := low
         xStart := bar_index
 
-        if showBox
-            bx := box.new(bar_index, hi, bar_index, lo, border_color = cBorder,
-                 border_width = lineWidth, bgcolor = cFill)
+        if inWindow
+            bx := box.new(bar_index, hi, bar_index, lo, border_color = col, border_width = 1,
+                 border_style = bStyle, bgcolor = showFill ? color.new(col, fillOpacity) : cNone)
 
-        if showLines
-            hiLn := line.new(bar_index, hi, bar_index, hi, color = cBorder, width = lineWidth)
-            loLn := line.new(bar_index, lo, bar_index, lo, color = cBorder, width = lineWidth)
-
-        if showLabels
-            lbl := label.new(bar_index, hi, name, style = label.style_label_down,
-                 color = color.new(cBorder, 15), textcolor = color.white, size = lblSize)
+            if showLabels
+                lbl := label.new(bar_index, hi, name, style = labelChip ? label.style_label_down : label.style_none,
+                     color = labelChip ? color.new(col, 10) : cNone,
+                     textcolor = labelChip ? color.white : col, size = lblSize)
 
     else if running
         hi := math.max(hi, high)
@@ -119,44 +123,31 @@ drawSession(active, cBorder, cFill, name) =>
             box.set_bottom(bx, lo)
             box.set_right(bx, bar_index)
 
-        if not na(hiLn)
-            line.set_xy1(hiLn, xStart, hi)
-            line.set_xy2(hiLn, bar_index, hi)
-            line.set_xy1(loLn, xStart, lo)
-            line.set_xy2(loLn, bar_index, lo)
-
         if not na(lbl)
             label.set_y(lbl, hi)
 
-    else if extendLine and not na(hiLn)
-        // Sesion cerrada: el alto y el bajo quedan proyectados hacia adelante
-        // hasta que arranque la proxima sesion (ahi se crean lineas nuevas).
-        line.set_x2(hiLn, bar_index)
-        line.set_x2(loLn, bar_index)
+    else
+        if ending and showLevels and not na(bx)
+            hiLn := line.new(xStart, hi, bar_index, hi, color = col, width = 1, style = line.style_dotted)
+            loLn := line.new(xStart, lo, bar_index, lo, color = col, width = 1, style = line.style_dotted)
 
-    // Valor de retorno explicito: deja la cadena if/else en posicion de
-    // sentencia y evita el chequeo de tipos entre ramas.
+        // Los niveles siguen hacia adelante hasta que arranque la proxima
+        // sesion, momento en el que se crean lineas nuevas y estas se congelan.
+        if not na(hiLn)
+            line.set_x2(hiLn, bar_index)
+            line.set_x2(loLn, bar_index)
+
     hi
 
-drawSession(asiaOn, asiaBorder, asiaFill, asiaTxt)
-drawSession(lonOn,  lonBorder,  lonFill,  lonTxt)
-drawSession(lcOn,   lcBorder,   lcFill,   lcTxt)
-drawSession(nyOn,   nyBorder,   nyFill,   nyTxt)
-
-// ============================================================================
-// FONDO
-// ============================================================================
-// bgcolor() solo puede llamarse en scope global, por eso se usa un ternario.
-// Prioridad: la sesion mas especifica gana cuando hay solapamiento.
-
-var color cNone = na
-bgCol = lcOn ? lcFill : lonOn ? lonFill : asiaOn ? asiaFill : nyOn ? nyFill : cNone
-bgcolor(showBg ? bgCol : cNone, title = "Fondo de sesion")
+drawSession(asiaOn, asiaCol, asiaTxt)
+drawSession(lonOn,  lonCol,  lonTxt)
+drawSession(lcOn,   lcCol,   lcTxt)
+drawSession(nyOn,   nyCol,   nyTxt)
 
 // ============================================================================
 // ALERTAS
 // ============================================================================
-// alertcondition() requiere mensaje constante y scope global.
+// alertcondition() requiere scope global y mensaje constante.
 
 alertcondition(asiaOn and not asiaOn[1], "Apertura Asia",          "Comenzo la sesion de Asia")
 alertcondition(lonOn  and not lonOn[1],  "Apertura Londres",       "Comenzo la sesion de Londres")
