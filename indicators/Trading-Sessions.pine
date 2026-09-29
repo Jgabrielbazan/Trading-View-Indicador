@@ -33,12 +33,33 @@ nyColor = input.color(color.new(color.red, 80), title="New York Color", group="C
 nyHighLowColor = input.color(color.new(color.red, 50), title="New York High/Low Color", group="Colors")
 nyLabel = input.string("NEW YORK", title="New York Label", group="Labels")
 
+// Configuración de Zona Horaria
+timezoneMode = input.string("UTC", options=["UTC", "EST (UTC-5)", "EDT (UTC-4)", "GMT (UTC+0)", "CET (UTC+1)", "CEST (UTC+2)", "Custom Offset"],
+                            title="Timezone", group="Timezone")
+customOffset = input.float(0, minval=-12, maxval=12, step=0.5, title="Custom Timezone Offset (hours)", group="Timezone")
+
+// Calcular offset basado en selección
+getTimezoneOffset() =>
+    switch timezoneMode
+        "UTC" => 0
+        "EST (UTC-5)" => -5
+        "EDT (UTC-4)" => -4
+        "GMT (UTC+0)" => 0
+        "CET (UTC+1)" => 1
+        "CEST (UTC+2)" => 2
+        "Custom Offset" => customOffset
+        => 0
+
+tzOffset = getTimezoneOffset()
+adjustedHour = (hour + tzOffset + 24) % 24
+
 // Configuración General
 showSessionLabels = input.bool(true, title="Show Session Labels", group="Display")
 showSessionBox = input.bool(true, title="Show Session Box", group="Display")
 showHighLow = input.bool(true, title="Show High/Low Ranges", group="Display")
 highLowWidth = input.int(2, minval=1, maxval=5, title="High/Low Line Width", group="Display")
 labelSize = input.string(size.small, options=[size.tiny, size.small, size.normal, size.large, size.huge], title="Label Size", group="Display")
+showTimezoneLabel = input.bool(true, title="Show Timezone Info", group="Display")
 
 // ============================================================================
 // VARIABLES PARA TRACKING DE RANGOS
@@ -58,16 +79,16 @@ var nySessionLow = low
 // ============================================================================
 
 isAsiaSession() =>
-    hour >= 22 or hour < 6
+    adjustedHour >= 22 or adjustedHour < 6
 
 isLondonSession() =>
-    hour >= 7 and hour < 15
+    adjustedHour >= 7 and adjustedHour < 15
 
 isLondonCloseSession() =>
-    hour >= 15 and hour < 17
+    adjustedHour >= 15 and adjustedHour < 17
 
 isNYSession() =>
-    hour >= 13 and hour < 21
+    adjustedHour >= 13 and adjustedHour < 21
 
 getCurrentSessionColor() =>
     if isNYSession()
@@ -172,6 +193,15 @@ if showSessionLabels and barstate.islast
     else if isAsiaSession()
         label.new(bar_index, y_position, asiaLabel, xloc=xloc.bar_index, yloc=yloc.above,
                  color=color.new(asiaColor, 0), textcolor=color.white, style=label.style_label_down, size=labelSize)
+
+// ============================================================================
+// MUESTRA ZONA HORARIA ACTUAL
+// ============================================================================
+
+if showTimezoneLabel and barstate.islast
+    tzText = "TZ: " + timezoneMode
+    label.new(bar_index, low, tzText, xloc=xloc.bar_index, yloc=yloc.below,
+             color=color.new(color.gray, 20), textcolor=color.white, style=label.style_label_up, size=size.tiny)
 
 // ============================================================================
 // ALERTS
