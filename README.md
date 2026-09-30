@@ -2,8 +2,14 @@
 
 Indicadores en Pine Script v5 para TradingView.
 
+Para TradingView (Pine Script v5):
+
 - [CRT — Candle Range Theory](#crt--candle-range-theory)
 - [Trading Sessions](#trading-sessions)
+
+Para FX Replay (FXR Script):
+
+- [Trading Sessions (FX Replay)](#trading-sessions-fx-replay)
 
 ## CRT — Candle Range Theory
 
@@ -150,6 +156,52 @@ etiqueta.
 
 Globales: mostrar caja, mostrar líneas, extender líneas al cerrar, mostrar
 etiquetas, mostrar fondo, grosor de línea y tamaño de etiqueta.
+
+## Trading Sessions (FX Replay)
+
+`indicators/fxreplay/Trading-Sessions.js`
+
+El mismo indicador de sesiones, reescrito para **FX Replay**. La plataforma no
+corre Pine Script: usa **FXR Script**, un lenguaje propio basado en JavaScript.
+No es una adaptación del `.pine`, es otra implementación.
+
+### Cómo instalarlo
+
+1. En FX Replay, abrir el editor de **Custom Indicators**.
+2. Pegar el contenido de `indicators/fxreplay/Trading-Sessions.js`.
+3. Guardar y agregarlo al gráfico.
+
+### Diferencias con la versión de TradingView
+
+Dos límites de la plataforma obligan a cambios de fondo:
+
+**1. No hay zonas horarias IANA.** FXR Script expone Moment.js pero no
+`moment-timezone`, así que no existe `America/New_York`. El horario de verano se
+calcula a mano con las reglas reales:
+
+| Zona | Regla de horario de verano |
+| ---- | -------------------------- |
+| Nueva York | 2.º domingo de marzo 07:00 UTC → 1.er domingo de noviembre 06:00 UTC |
+| Londres / Frankfurt | Último domingo de marzo → último domingo de octubre, 01:00 UTC |
+| Tokio | Sin horario de verano |
+| Personalizado | Offset fijo que ponés vos, sin ajuste automático |
+
+**2. Los dibujos no se recalculan solos.** En Pine una caja se actualiza vela a
+vela; acá se crean y quedan. Por eso cada sesión se dibuja **una sola vez, al
+cerrar**, con el rango ya definitivo. La opción `Dibujar la sesión en curso`
+muestra además la caja formándose, borrando y redibujando en cada vela — útil en
+replay paso a paso.
+
+**3. Sin alertas.** FXR Script no tiene un equivalente a `alertcondition()`.
+
+### Detalle de implementación
+
+Una sesión solo se dibuja si el indicador **vio su apertura**. Si al entrar en la
+ventana de historial la sesión ya venía abierta, se la ignora en vez de dibujar
+un rango incompleto. Por eso el primer día del gráfico puede faltar una caja.
+
+El historial se limita con `Velas de historial` (1000 por defecto), que además
+controla cuánto trabajo hace el script al cargar.
 
 ## Uso
 
