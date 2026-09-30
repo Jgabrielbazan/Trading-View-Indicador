@@ -18,25 +18,27 @@ init = () => {
 
     const gA = 'Asia';
     input.bool('Activar', true, 'asiaOn', undefined, gA, 'rowAsia');
-    input.color('Color', '#5C6BC0', 'asiaCol', gA, undefined, 'rowAsia');
+    // input.color solo acepta BaseColors o un objeto { r, g, b, a }, nunca un
+    // string hexadecimal.
+    input.color('Color', { r: 92, g: 107, b: 192, a: 1 }, 'asiaCol', gA, undefined, 'rowAsia');
     input.session('Horario', '1900-0400', 'asiaSess', undefined, undefined, gA);
     input.str('Etiqueta', 'ASIA', 'asiaTxt', undefined, undefined, gA);
 
     const gL = 'Londres';
     input.bool('Activar', true, 'lonOn', undefined, gL, 'rowLon');
-    input.color('Color', '#26A69A', 'lonCol', gL, undefined, 'rowLon');
+    input.color('Color', { r: 38, g: 166, b: 154, a: 1 }, 'lonCol', gL, undefined, 'rowLon');
     input.session('Horario', '0300-1130', 'lonSess', undefined, undefined, gL);
     input.str('Etiqueta', 'LONDON', 'lonTxt', undefined, undefined, gL);
 
     const gC = 'Londres Close';
     input.bool('Activar', true, 'lcOn', undefined, gC, 'rowLc');
-    input.color('Color', '#FFA726', 'lcCol', gC, undefined, 'rowLc');
+    input.color('Color', { r: 255, g: 167, b: 38, a: 1 }, 'lcCol', gC, undefined, 'rowLc');
     input.session('Horario', '1000-1200', 'lcSess', undefined, undefined, gC);
     input.str('Etiqueta', 'LDN CLOSE', 'lcTxt', undefined, undefined, gC);
 
     const gN = 'Nueva York';
     input.bool('Activar', true, 'nyOn', undefined, gN, 'rowNy');
-    input.color('Color', '#EF5350', 'nyCol', gN, undefined, 'rowNy');
+    input.color('Color', { r: 239, g: 83, b: 80, a: 1 }, 'nyCol', gN, undefined, 'rowNy');
     input.session('Horario', '0800-1700', 'nySess', undefined, undefined, gN);
     input.str('Etiqueta', 'NEW YORK', 'nyTxt', undefined, undefined, gN);
 
