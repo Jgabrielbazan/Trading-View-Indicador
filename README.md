@@ -26,18 +26,26 @@ la barrida del alto un **Upthrust** (sesgo bajista).
 
 ### Qué dibuja
 
-Por defecto, solo tres elementos por setup:
+Por defecto, cuatro elementos por setup:
 
-- **Caja del rango** — punteada, sin relleno, sobre la vela de referencia. Su
-  borde superior es el alto del rango y el inferior el bajo.
+- **Caja del rango** — punteada, sin relleno. Arranca en la vela de referencia
+  (borde superior = alto del rango, inferior = bajo) y **se extiende con el
+  precio hasta que el setup toca objetivo o stop**, así se ve de un vistazo qué
+  zona sigue viva.
 - **Marcador de señal** — triángulo chico arriba o abajo de la vela de
   detección.
-- **Línea de objetivo** — punteada, desde la caja hacia adelante. Se extiende
-  mientras el setup está vivo y se congela al tocar objetivo o stop.
+- **Línea de objetivo** — punteada, desde la caja hacia adelante. Se congela en
+  el punto exacto del desenlace.
 - **Marca de la barrida** — línea corta sobre el extremo que fue barrido.
 
 Opcionales (apagados por defecto): línea de entrada, línea de stop, etiqueta de
 R:R, etiquetas AMD, panel de estado y detección de consolidaciones.
+
+**Dos capas distintas**: los triángulos quedan en **todo el historial** (sirven
+para revisar hacia atrás), mientras que las cajas y las líneas solo se mantienen
+para los últimos N setups (`Setups en pantalla`, 5 por defecto). Por eso vas a
+ver triángulos viejos sin caja: es intencional, no un error. Si los querés
+emparejar, subí `Setups en pantalla` o apagá el marcador.
 
 ### Temporalidad
 

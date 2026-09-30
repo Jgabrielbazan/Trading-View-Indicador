@@ -9,8 +9,8 @@ indicator("CRT - Candle Range Theory", "CRT", overlay = true,
 gG = "General"
 htfIn = input.timeframe("240", "Temporalidad del rango", group = gG,
      tooltip = "Vela de referencia del CRT. D, 240 (H4) y 60 (H1) dan los rangos mas limpios. La temporalidad del grafico debe ser menor.")
-maxSetups = input.int(3, "Setups en pantalla", minval = 1, maxval = 20, group = gG,
-     tooltip = "Cuantos setups se mantienen dibujados. Menos = grafico mas limpio.")
+maxSetups = input.int(5, "Setups en pantalla", minval = 1, maxval = 20, group = gG,
+     tooltip = "Cuantas cajas y lineas se mantienen dibujadas. Los triangulos de senal quedan en todo el historial.")
 showFailed = input.bool(true, "Dejar marcados los setups invalidados", group = gG,
      tooltip = "Apagado: se borran del grafico al invalidarse.")
 
@@ -51,6 +51,8 @@ showRR = input.bool(false, "Etiqueta de R:R", group = gN)
 
 gV = "Visual"
 showBox = input.bool(true, "Caja del rango", group = gV)
+extendBox = input.bool(true, "Extender la caja hasta el desenlace", group = gV,
+     tooltip = "La caja acompana al precio hasta que toca objetivo o stop. Da contexto de la zona que sigue viva.")
 boxFill = input.bool(false, "Rellenar la caja", group = gV)
 fillOp = input.int(94, "Transparencia del relleno", minval = 70, maxval = 99, group = gV)
 showMark = input.bool(true, "Marcador de senal", group = gV)
@@ -194,11 +196,11 @@ if newHTF
             s = Setup.new(bull = isB, target = tgt, stop = stp)
 
             if showBox
-                s.bx := box.new(rl0, rH, rr0, rL, border_color = color.new(col, 25), border_width = 1,
+                s.bx := box.new(rl0, rH, rr0, rL, border_color = color.new(col, 10), border_width = 1,
                      border_style = line.style_dotted, bgcolor = boxFill ? color.new(col, fillOp) : cNone)
 
             if showSweep
-                s.swLn := line.new(ms0, swx, bar_index, swx, color = color.new(col, 35), width = 1)
+                s.swLn := line.new(ms0, swx, bar_index, swx, color = color.new(col, 20), width = 1)
 
             if showTgt
                 s.tgtLn := line.new(rr0, tgt, bar_index, tgt, color = col, width = 1, style = line.style_dotted)
@@ -213,15 +215,16 @@ if newHTF
 
             if showAMD
                 s.la := label.new(int((rl0 + rr0) / 2), (rH + rL) / 2, "A", style = label.style_none,
-                     textcolor = color.new(col, 25), size = size.tiny)
+                     textcolor = col, size = size.tiny)
                 s.lm := label.new(int((ms0 + bar_index) / 2), swx, "M", style = label.style_none,
-                     textcolor = color.new(col, 25), size = size.tiny)
+                     textcolor = col, size = size.tiny)
                 s.ld := label.new(bar_index, ent, "D", style = label.style_none,
-                     textcolor = color.new(col, 25), size = size.tiny)
+                     textcolor = col, size = size.tiny)
 
+            // La etiqueta viaja con la punta de la linea de objetivo.
             if showRR
                 s.lrr := label.new(bar_index, tgt, str.tostring(rrVal, "#.0") + "R", style = label.style_none,
-                     textcolor = color.new(col, 25), size = size.tiny)
+                     textcolor = col, size = size.tiny)
 
             array.push(setups, s)
             lastSigTxt := isB ? "Alcista" : "Bajista"
@@ -249,12 +252,24 @@ if array.size(setups) > 0
             hitStp = s.bull ? low <= s.stop : high >= s.stop
             hitTgt = s.bull ? high >= s.target : low <= s.target
 
+            // La punta avanza hasta esta vela en los tres casos. Si el setup se
+            // resuelve aca, queda congelada justo en el desenlace.
+            if not na(s.tgtLn)
+                line.set_x2(s.tgtLn, bar_index)
+            if not na(s.entLn)
+                line.set_x2(s.entLn, bar_index)
+            if not na(s.stpLn)
+                line.set_x2(s.stpLn, bar_index)
+            if not na(s.lrr)
+                label.set_x(s.lrr, bar_index)
+            if extendBox and not na(s.bx)
+                box.set_right(s.bx, bar_index)
+
             if hitStp
                 s.done := true
                 failBar := true
                 if showFailed
                     if not na(s.tgtLn)
-                        line.set_x2(s.tgtLn, bar_index)
                         line.set_color(s.tgtLn, color.new(failCol, 20))
                         line.set_style(s.tgtLn, line.style_dashed)
                     if not na(s.bx)
@@ -262,10 +277,8 @@ if array.size(setups) > 0
                         box.set_bgcolor(s.bx, boxFill ? color.new(failCol, fillOp) : cNone)
                     if not na(s.swLn)
                         line.set_color(s.swLn, color.new(failCol, 45))
-                    if not na(s.entLn)
-                        line.set_x2(s.entLn, bar_index)
-                    if not na(s.stpLn)
-                        line.set_x2(s.stpLn, bar_index)
+                    if not na(s.lrr)
+                        label.set_textcolor(s.lrr, color.new(failCol, 20))
                 else
                     killSetup(s)
                     array.remove(setups, i)
@@ -273,20 +286,6 @@ if array.size(setups) > 0
             else if hitTgt
                 s.done := true
                 hitBar := true
-                if not na(s.tgtLn)
-                    line.set_x2(s.tgtLn, bar_index)
-                if not na(s.entLn)
-                    line.set_x2(s.entLn, bar_index)
-                if not na(s.stpLn)
-                    line.set_x2(s.stpLn, bar_index)
-
-            else
-                if not na(s.tgtLn)
-                    line.set_x2(s.tgtLn, bar_index)
-                if not na(s.entLn)
-                    line.set_x2(s.entLn, bar_index)
-                if not na(s.stpLn)
-                    line.set_x2(s.stpLn, bar_index)
 
 // ============================================================================
 // CONSOLIDACION
@@ -335,8 +334,11 @@ else
 // ============================================================================
 // plotshape y alertcondition solo funcionan en scope global.
 
-plotshape(showMark and sigBull, "CRT alcista", shape.triangleup, location.belowbar, bullCol, size = size.tiny)
-plotshape(showMark and sigBear, "CRT bajista", shape.triangledown, location.abovebar, bearCol, size = size.tiny)
+// display.pane evita que el 0/1 de la senal aparezca en la linea de estado.
+plotshape(showMark and sigBull, "CRT alcista", shape.triangleup, location.belowbar, bullCol,
+     size = size.tiny, display = display.pane)
+plotshape(showMark and sigBear, "CRT bajista", shape.triangledown, location.abovebar, bearCol,
+     size = size.tiny, display = display.pane)
 
 alertcondition(sigBull, "CRT alcista", "CRT alcista: barrida del bajo del rango y cierre de vuelta adentro")
 alertcondition(sigBear, "CRT bajista", "CRT bajista: barrida del alto del rango y cierre de vuelta adentro")
