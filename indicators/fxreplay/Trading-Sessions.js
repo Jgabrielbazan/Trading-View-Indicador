@@ -3,10 +3,6 @@
 init = () => {
     indicator({ onMainPanel: true, format: 'inherit' });
 
-    // Estado entre velas. onTick recorre las velas en orden, asi que alcanza
-    // con ir acumulando el alto y el bajo de la sesion que esta abierta.
-    fxrSess = { live: {}, drawn: {} };
-
     const gTz = 'Zona horaria';
     input.str('Zona horaria', 'Nueva York', 'tzMode',
         ['UTC', 'Nueva York', 'Londres', 'Frankfurt', 'Tokio', 'Personalizado'],
@@ -18,8 +14,6 @@ init = () => {
 
     const gA = 'Asia';
     input.bool('Activar', true, 'asiaOn', undefined, gA, 'rowAsia');
-    // input.color solo acepta BaseColors o un objeto { r, g, b, a }, nunca un
-    // string hexadecimal.
     input.color('Color', { r: 92, g: 107, b: 192, a: 1 }, 'asiaCol', gA, undefined, 'rowAsia');
     input.session('Horario', '1900-0400', 'asiaSess', undefined, undefined, gA);
     input.str('Etiqueta', 'ASIA', 'asiaTxt', undefined, undefined, gA);
@@ -56,27 +50,24 @@ init = () => {
     input.bool('Proyectar las lineas hacia adelante', false, 'extendLevels',
         'Las extiende hasta el borde derecho. Sin limite, asi que con varias sesiones ensucia.',
         gS);
-    input.bool('Etiquetas', true, 'showLabel', undefined, gS);
-    input.bool('Dibujar la sesion en curso', true, 'livePreview',
-        'Muestra la caja formandose mientras la sesion esta abierta. Util en replay, paso a paso.',
-        gS);
+    input.bool('Etiqueta con el nombre', true, 'showLabel', undefined, gS);
 };
 
+// El validador de FX Replay solo ve el interior de init y onTick, asi que todo
+// vive aca adentro: nada de constantes ni funciones en el nivel superior, y
+// nada de estado compartido entre llamadas. Cada sesion se resuelve leyendo
+// las velas hacia atras, sin memoria.
 onTick = (length, _moment, _, ta, inputs) => {
     if (index < 1) return;
     if (index < length - inputs.histBars) return;
-
-    if (typeof fxrSess === 'undefined' || !fxrSess) {
-        fxrSess = { live: {}, drawn: {} };
-    }
 
     const m = _moment;
     const HOUR_MS = 3600000;
     const MIN_MS = 60000;
 
-    // --- AYUDANTES DE TIEMPO ---
-    // FXR Script expone Moment.js pero no moment-timezone, asi que no hay
-    // zonas IANA. El horario de verano se calcula con las reglas reales.
+    // --- TIEMPO ---
+    // Hay Moment.js pero no moment-timezone, asi que no existen las zonas
+    // IANA y el horario de verano se calcula con las reglas reales.
 
     // Domingo n-esimo de un mes, a las 00:00 UTC. month va de 0 a 11.
     const nthSundayUtc = (year, month, n) => {
@@ -91,27 +82,24 @@ onTick = (length, _moment, _, ta, inputs) => {
         return end.subtract(end.day(), 'days').valueOf();
     };
 
-    // EEUU: 2do domingo de marzo 07:00 UTC -> 1er domingo de noviembre 06:00 UTC.
-    const isUsDst = (ts) => {
-        const y = m.utc(ts).year();
-        return ts >= nthSundayUtc(y, 2, 2) + 7 * HOUR_MS &&
-               ts < nthSundayUtc(y, 10, 1) + 6 * HOUR_MS;
-    };
-
-    // UE: ultimo domingo de marzo -> ultimo domingo de octubre, ambos 01:00 UTC.
-    const isEuDst = (ts) => {
-        const y = m.utc(ts).year();
-        return ts >= lastSundayUtc(y, 2) + HOUR_MS &&
-               ts < lastSundayUtc(y, 9) + HOUR_MS;
-    };
-
     const offsetMinutes = (ts) => {
         const mode = inputs.tzMode;
-        if (mode === 'Nueva York') return isUsDst(ts) ? -240 : -300;
-        if (mode === 'Londres') return isEuDst(ts) ? 60 : 0;
-        if (mode === 'Frankfurt') return isEuDst(ts) ? 120 : 60;
+        const year = m.utc(ts).year();
         if (mode === 'Tokio') return 540;
         if (mode === 'Personalizado') return Math.round(inputs.tzCustom * 60);
+        if (mode === 'Nueva York') {
+            // 2do domingo de marzo 07:00 UTC -> 1er domingo de noviembre 06:00 UTC.
+            const on = ts >= nthSundayUtc(year, 2, 2) + 7 * HOUR_MS &&
+                       ts < nthSundayUtc(year, 10, 1) + 6 * HOUR_MS;
+            return on ? -240 : -300;
+        }
+        if (mode === 'Londres' || mode === 'Frankfurt') {
+            // Ultimo domingo de marzo -> ultimo domingo de octubre, 01:00 UTC.
+            const on = ts >= lastSundayUtc(year, 2) + HOUR_MS &&
+                       ts < lastSundayUtc(year, 9) + HOUR_MS;
+            const base = mode === 'Frankfurt' ? 60 : 0;
+            return on ? base + 60 : base;
+        }
         return 0;
     };
 
@@ -134,32 +122,17 @@ onTick = (length, _moment, _, ta, inputs) => {
         return hhmm >= from || hhmm < to;
     };
 
-    // --- ESTILOS ---
+    // --- ESTILO ---
 
     const borderStyle = inputs.borderStyle === 'Solido' ? 0
         : inputs.borderStyle === 'Punteado' ? 1
         : 2;
 
-    const boxStyle = (col) => ({
-        color: col,
-        backgroundColor: col,
-        fillBackground: inputs.fillBox,
-        transparency: inputs.fillTransp,
-        linewidth: 1,
-        linestyle: borderStyle,
-        extendRight: false
-    });
-
-    // La caja en curso se redibuja vela a vela, asi que necesita borrarse. Si
-    // la plataforma no expone el borrado, se apaga sola en vez de acumular.
-    const canDelete = typeof deleteDrawingById === 'function';
-    const livePreview = inputs.livePreview && canDelete;
-
     const defs = [
-        { key: 'asia', on: inputs.asiaOn, raw: inputs.asiaSess, col: inputs.asiaCol, name: inputs.asiaTxt },
-        { key: 'lon', on: inputs.lonOn, raw: inputs.lonSess, col: inputs.lonCol, name: inputs.lonTxt },
-        { key: 'lc', on: inputs.lcOn, raw: inputs.lcSess, col: inputs.lcCol, name: inputs.lcTxt },
-        { key: 'ny', on: inputs.nyOn, raw: inputs.nySess, col: inputs.nyCol, name: inputs.nyTxt }
+        { on: inputs.asiaOn, raw: inputs.asiaSess, col: inputs.asiaCol, name: inputs.asiaTxt },
+        { on: inputs.lonOn, raw: inputs.lonSess, col: inputs.lonCol, name: inputs.lonTxt },
+        { on: inputs.lcOn, raw: inputs.lcSess, col: inputs.lcCol, name: inputs.lcTxt },
+        { on: inputs.nyOn, raw: inputs.nySess, col: inputs.nyCol, name: inputs.nyTxt }
     ];
 
     for (let i = 0; i < defs.length; i++) {
@@ -175,62 +148,50 @@ onTick = (length, _moment, _, ta, inputs) => {
             return insideWindow(wallClock(t), win.from, win.to);
         };
 
-        const nowIn = barInside(0);
-        const prevIn = barInside(1);
-        let st = fxrSess.live[d.key];
+        // Solo se dibuja en la vela siguiente al cierre de la sesion, cuando el
+        // rango ya es definitivo. Asi cada sesion se dibuja una unica vez.
+        if (barInside(0) || !barInside(1)) continue;
 
-        if (nowIn) {
-            if (!prevIn) {
-                // Arranca la sesion. Solo se siguen las que se ven empezar:
-                // una ya a mitad de camino daria un rango incompleto.
-                st = { hi: high(0), lo: low(0), startT: time(0), boxId: null };
-                fxrSess.live[d.key] = st;
-            } else if (st) {
-                if (high(0) > st.hi) st.hi = high(0);
-                if (low(0) < st.lo) st.lo = low(0);
-            }
+        // Recorre la sesion hacia atras para su alto, su bajo y su inicio.
+        let hi = high(1);
+        let lo = low(1);
+        let startT = time(1);
+        let k = 1;
+        while (k < 5000 && barInside(k)) {
+            const h = high(k);
+            const l = low(k);
+            if (h > hi) hi = h;
+            if (l < lo) lo = l;
+            startT = time(k);
+            k++;
+        }
 
-            if (livePreview && st) {
-                if (st.boxId) deleteDrawingById(st.boxId);
-                st.boxId = rectangle(st.startT, st.hi, time(0), st.lo, boxStyle(d.col));
-            }
+        const endT = time(1);
 
-        } else if (prevIn && st) {
-            // La sesion cerro en la vela anterior: el rango ya es definitivo.
-            if (st.boxId && canDelete) deleteDrawingById(st.boxId);
+        if (inputs.showBox) {
+            rectangle(startT, hi, endT, lo, {
+                color: d.col,
+                backgroundColor: d.col,
+                fillBackground: inputs.fillBox,
+                transparency: inputs.fillTransp,
+                linewidth: 1,
+                linestyle: borderStyle,
+                extendRight: false,
+                showLabel: inputs.showLabel,
+                textColor: d.col,
+                fontSize: 11
+            }, d.name);
+        }
 
-            const drawKey = d.key + '@' + st.startT;
-            if (!fxrSess.drawn[drawKey]) {
-                fxrSess.drawn[drawKey] = true;
-                const endT = time(1);
-
-                if (inputs.showBox) {
-                    rectangle(st.startT, st.hi, endT, st.lo, boxStyle(d.col));
-                }
-
-                if (inputs.showLevels) {
-                    const lineStyle = {
-                        linecolor: d.col,
-                        linewidth: 1,
-                        linestyle: 1,
-                        extendRight: inputs.extendLevels
-                    };
-                    trendLine(newPoint(st.startT, st.hi), newPoint(endT, st.hi), lineStyle);
-                    trendLine(newPoint(st.startT, st.lo), newPoint(endT, st.lo), lineStyle);
-                }
-
-                if (inputs.showLabel) {
-                    text(st.startT, st.hi, {
-                        color: d.col,
-                        fontsize: 11,
-                        bold: false,
-                        fillBackground: false,
-                        drawBorder: false
-                    }, d.name);
-                }
-            }
-
-            fxrSess.live[d.key] = null;
+        if (inputs.showLevels) {
+            const lineStyle = {
+                linecolor: d.col,
+                linewidth: 1,
+                linestyle: 1,
+                extendRight: inputs.extendLevels
+            };
+            trendLine(newPoint(startT, hi), newPoint(endT, hi), lineStyle);
+            trendLine(newPoint(startT, lo), newPoint(endT, lo), lineStyle);
         }
     }
 };

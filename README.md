@@ -187,21 +187,28 @@ calcula a mano con las reglas reales:
 | Personalizado | Offset fijo que ponés vos, sin ajuste automático |
 
 **2. Los dibujos no se recalculan solos.** En Pine una caja se actualiza vela a
-vela; acá se crean y quedan. Por eso cada sesión se dibuja **una sola vez, al
-cerrar**, con el rango ya definitivo. La opción `Dibujar la sesión en curso`
-muestra además la caja formándose, borrando y redibujando en cada vela — útil en
-replay paso a paso.
+vela; acá se crean y quedan. Por eso cada sesión se dibuja **una sola vez**, en
+la vela siguiente a su cierre, cuando el rango ya es definitivo. No hay vista
+previa de la sesión en curso.
 
-**3. Sin alertas.** FXR Script no tiene un equivalente a `alertcondition()`.
+**3. El validador solo ve el interior de `init` y `onTick`.** Antes de publicar,
+FX Replay corre un chequeo de nombres tipo TypeScript sobre el cuerpo de esas dos
+funciones nada más. Eso impone dos reglas:
+
+- Nada en el nivel superior del módulo. Toda constante o función auxiliar
+  declarada afuera da `Cannot find name`, aunque en JavaScript puro funcione.
+- Nada de estado entre llamadas. No hay dónde guardarlo que el validador acepte,
+  así que el indicador es **sin memoria**: cuando detecta que una sesión cerró,
+  recorre las velas hacia atrás para reconstruir su alto, su bajo y su inicio.
+
+**4. Sin alertas y sin `text()`.** No hay equivalente a `alertcondition()`, y la
+función `text()` figura en la documentación pero no existe en el runtime. La
+etiqueta con el nombre de la sesión va como parámetro del propio `rectangle()`.
 
 ### Detalle de implementación
 
-Una sesión solo se dibuja si el indicador **vio su apertura**. Si al entrar en la
-ventana de historial la sesión ya venía abierta, se la ignora en vez de dibujar
-un rango incompleto. Por eso el primer día del gráfico puede faltar una caja.
-
-El historial se limita con `Velas de historial` (1000 por defecto), que además
-controla cuánto trabajo hace el script al cargar.
+El historial se limita con `Velas de historial` (1000 por defecto), que controla
+tanto la limpieza del gráfico como cuánto trabaja el script al cargar.
 
 ## Uso
 
