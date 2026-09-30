@@ -1,95 +1,19 @@
 //@version=1
 
-// ===========================================================================
-// Trading Sessions - FX Replay (FXR Script)
-// ===========================================================================
-// Port del indicador de sesiones escrito para TradingView en Pine v5.
-//
-// Dos diferencias de fondo con la version Pine, impuestas por la plataforma:
-//
-// 1. FXR Script expone Moment.js pero NO moment-timezone, asi que no existen
-//    las zonas IANA. El horario de verano se calcula a mano aplicando las
-//    reglas de Estados Unidos y de la Union Europea.
-//
-// 2. Los dibujos se crean y no se recalculan solos. Cada sesion se dibuja una
-//    unica vez, cuando cierra, con el alto y el bajo ya definitivos.
-// ===========================================================================
-
-const HOUR_MS = 3600000;
-const MIN_MS = 60000;
-
-// Estado entre velas: onTick recorre las velas en orden, asi que alcanza con
-// ir acumulando el alto y el bajo de la sesion que esta abierta.
-const liveSessions = {};
-const alreadyDrawn = {};
-
-// Domingo n-esimo de un mes, a las 00:00 UTC. month va de 0 a 11.
-const nthSundayUtc = (m, year, month, n) => {
-    const first = m.utc([year, month, 1]);
-    const shift = ((7 - first.day()) % 7) + (n - 1) * 7;
-    return first.add(shift, 'days').valueOf();
-};
-
-// Ultimo domingo de un mes, a las 00:00 UTC.
-const lastSundayUtc = (m, year, month) => {
-    const end = m.utc([year, month, 1]).endOf('month').startOf('day');
-    return end.subtract(end.day(), 'days').valueOf();
-};
-
-// EEUU: segundo domingo de marzo 07:00 UTC -> primer domingo de noviembre 06:00 UTC.
-const isUsDst = (m, ts) => {
-    const y = m.utc(ts).year();
-    return ts >= nthSundayUtc(m, y, 2, 2) + 7 * HOUR_MS &&
-           ts < nthSundayUtc(m, y, 10, 1) + 6 * HOUR_MS;
-};
-
-// UE: ultimo domingo de marzo -> ultimo domingo de octubre, ambos a las 01:00 UTC.
-const isEuDst = (m, ts) => {
-    const y = m.utc(ts).year();
-    return ts >= lastSundayUtc(m, y, 2) + HOUR_MS &&
-           ts < lastSundayUtc(m, y, 9) + HOUR_MS;
-};
-
-const offsetMinutes = (m, ts, mode, customHours) => {
-    if (mode === 'Nueva York') return isUsDst(m, ts) ? -240 : -300;
-    if (mode === 'Londres') return isEuDst(m, ts) ? 60 : 0;
-    if (mode === 'Frankfurt') return isEuDst(m, ts) ? 120 : 60;
-    if (mode === 'Tokio') return 540;
-    if (mode === 'Personalizado') return Math.round(customHours * 60);
-    return 0;
-};
-
-// Hora de pared como numero HHMM: las 14:30 devuelven 1430.
-const wallClock = (m, ts, offMin) => {
-    const d = m.utc(ts + offMin * MIN_MS);
-    return d.hours() * 100 + d.minutes();
-};
-
-// "0800-1700" y "0800-1700:23456" devuelven { from: 800, to: 1700 }.
-const parseSession = (raw) => {
-    const body = String(raw).split(':')[0].replace(/\s+/g, '');
-    const bits = body.split('-');
-    return { from: parseInt(bits[0], 10), to: parseInt(bits[1], 10) };
-};
-
-// Si el fin no es mayor que el inicio, la sesion cruza la medianoche.
-const insideWindow = (hhmm, from, to) =>
-    from <= to ? (hhmm >= from && hhmm < to) : (hhmm >= from || hhmm < to);
-
-// ===========================================================================
-// CONFIGURACION
-// ===========================================================================
-
 init = () => {
     indicator({ onMainPanel: true, format: 'inherit' });
+
+    // Estado entre velas. onTick recorre las velas en orden, asi que alcanza
+    // con ir acumulando el alto y el bajo de la sesion que esta abierta.
+    fxrSess = { live: {}, drawn: {} };
 
     const gTz = 'Zona horaria';
     input.str('Zona horaria', 'Nueva York', 'tzMode',
         ['UTC', 'Nueva York', 'Londres', 'Frankfurt', 'Tokio', 'Personalizado'],
-        'Los horarios de cada sesion se interpretan en esta zona. El horario de verano se ajusta solo, salvo en "Personalizado".',
+        'Los horarios de cada sesion se interpretan en esta zona. El horario de verano se ajusta solo, salvo en Personalizado.',
         gTz);
     input.float('Offset personalizado (horas)', -3, 'tzCustom', -12, 14, 0.5,
-        'Solo se usa con la zona "Personalizado". Offset fijo contra UTC, sin horario de verano.',
+        'Solo se usa con la zona Personalizado. Offset fijo contra UTC, sin horario de verano.',
         gTz);
 
     const gA = 'Asia';
@@ -128,7 +52,7 @@ init = () => {
         ['Solido', 'Punteado', 'Rayado'], undefined, gS);
     input.bool('Lineas de alto y bajo', true, 'showLevels', undefined, gS);
     input.bool('Proyectar las lineas hacia adelante', false, 'extendLevels',
-        'Las extiende hasta el borde derecho del grafico. Sin limite, asi que con varias sesiones ensucia.',
+        'Las extiende hasta el borde derecho. Sin limite, asi que con varias sesiones ensucia.',
         gS);
     input.bool('Etiquetas', true, 'showLabel', undefined, gS);
     input.bool('Dibujar la sesion en curso', true, 'livePreview',
@@ -136,22 +60,79 @@ init = () => {
         gS);
 };
 
-// ===========================================================================
-// LOGICA
-// ===========================================================================
-
 onTick = (length, _moment, _, ta, inputs) => {
     if (index < 1) return;
     if (index < length - inputs.histBars) return;
 
-    const m = _moment;
-    const tzMode = inputs.tzMode;
-    const tzCustom = inputs.tzCustom;
+    if (typeof fxrSess === 'undefined' || !fxrSess) {
+        fxrSess = { live: {}, drawn: {} };
+    }
 
-    // La caja en curso se redibuja vela a vela, asi que necesita borrarse.
-    // Si la plataforma no expone el borrado, se apaga sola en vez de acumular.
-    const canDelete = typeof deleteDrawingById === 'function';
-    const livePreview = inputs.livePreview && canDelete;
+    const m = _moment;
+    const HOUR_MS = 3600000;
+    const MIN_MS = 60000;
+
+    // --- AYUDANTES DE TIEMPO ---
+    // FXR Script expone Moment.js pero no moment-timezone, asi que no hay
+    // zonas IANA. El horario de verano se calcula con las reglas reales.
+
+    // Domingo n-esimo de un mes, a las 00:00 UTC. month va de 0 a 11.
+    const nthSundayUtc = (year, month, n) => {
+        const first = m.utc([year, month, 1]);
+        const shift = ((7 - first.day()) % 7) + (n - 1) * 7;
+        return first.add(shift, 'days').valueOf();
+    };
+
+    // Ultimo domingo de un mes, a las 00:00 UTC.
+    const lastSundayUtc = (year, month) => {
+        const end = m.utc([year, month, 1]).endOf('month').startOf('day');
+        return end.subtract(end.day(), 'days').valueOf();
+    };
+
+    // EEUU: 2do domingo de marzo 07:00 UTC -> 1er domingo de noviembre 06:00 UTC.
+    const isUsDst = (ts) => {
+        const y = m.utc(ts).year();
+        return ts >= nthSundayUtc(y, 2, 2) + 7 * HOUR_MS &&
+               ts < nthSundayUtc(y, 10, 1) + 6 * HOUR_MS;
+    };
+
+    // UE: ultimo domingo de marzo -> ultimo domingo de octubre, ambos 01:00 UTC.
+    const isEuDst = (ts) => {
+        const y = m.utc(ts).year();
+        return ts >= lastSundayUtc(y, 2) + HOUR_MS &&
+               ts < lastSundayUtc(y, 9) + HOUR_MS;
+    };
+
+    const offsetMinutes = (ts) => {
+        const mode = inputs.tzMode;
+        if (mode === 'Nueva York') return isUsDst(ts) ? -240 : -300;
+        if (mode === 'Londres') return isEuDst(ts) ? 60 : 0;
+        if (mode === 'Frankfurt') return isEuDst(ts) ? 120 : 60;
+        if (mode === 'Tokio') return 540;
+        if (mode === 'Personalizado') return Math.round(inputs.tzCustom * 60);
+        return 0;
+    };
+
+    // Hora de pared como numero HHMM: las 14:30 devuelven 1430.
+    const wallClock = (ts) => {
+        const d = m.utc(ts + offsetMinutes(ts) * MIN_MS);
+        return d.hours() * 100 + d.minutes();
+    };
+
+    // "0800-1700" y "0800-1700:23456" devuelven { from: 800, to: 1700 }.
+    const parseSession = (raw) => {
+        const body = String(raw).split(':')[0].replace(/\s+/g, '');
+        const bits = body.split('-');
+        return { from: parseInt(bits[0], 10), to: parseInt(bits[1], 10) };
+    };
+
+    // Si el fin no es mayor que el inicio, la sesion cruza la medianoche.
+    const insideWindow = (hhmm, from, to) => {
+        if (from <= to) return hhmm >= from && hhmm < to;
+        return hhmm >= from || hhmm < to;
+    };
+
+    // --- ESTILOS ---
 
     const borderStyle = inputs.borderStyle === 'Solido' ? 0
         : inputs.borderStyle === 'Punteado' ? 1
@@ -166,6 +147,11 @@ onTick = (length, _moment, _, ta, inputs) => {
         linestyle: borderStyle,
         extendRight: false
     });
+
+    // La caja en curso se redibuja vela a vela, asi que necesita borrarse. Si
+    // la plataforma no expone el borrado, se apaga sola en vez de acumular.
+    const canDelete = typeof deleteDrawingById === 'function';
+    const livePreview = inputs.livePreview && canDelete;
 
     const defs = [
         { key: 'asia', on: inputs.asiaOn, raw: inputs.asiaSess, col: inputs.asiaCol, name: inputs.asiaTxt },
@@ -184,20 +170,19 @@ onTick = (length, _moment, _, ta, inputs) => {
         const barInside = (k) => {
             const t = time(k);
             if (t === undefined || t === null || isNaN(t)) return false;
-            const off = offsetMinutes(m, t, tzMode, tzCustom);
-            return insideWindow(wallClock(m, t, off), win.from, win.to);
+            return insideWindow(wallClock(t), win.from, win.to);
         };
 
         const nowIn = barInside(0);
         const prevIn = barInside(1);
-        let st = liveSessions[d.key];
+        let st = fxrSess.live[d.key];
 
         if (nowIn) {
             if (!prevIn) {
-                // Arranca la sesion. Solo se sigue a las que se ven empezar:
-                // una sesion ya a mitad de camino daria un rango incompleto.
+                // Arranca la sesion. Solo se siguen las que se ven empezar:
+                // una ya a mitad de camino daria un rango incompleto.
                 st = { hi: high(0), lo: low(0), startT: time(0), boxId: null };
-                liveSessions[d.key] = st;
+                fxrSess.live[d.key] = st;
             } else if (st) {
                 if (high(0) > st.hi) st.hi = high(0);
                 if (low(0) < st.lo) st.lo = low(0);
@@ -213,8 +198,8 @@ onTick = (length, _moment, _, ta, inputs) => {
             if (st.boxId && canDelete) deleteDrawingById(st.boxId);
 
             const drawKey = d.key + '@' + st.startT;
-            if (!alreadyDrawn[drawKey]) {
-                alreadyDrawn[drawKey] = true;
+            if (!fxrSess.drawn[drawKey]) {
+                fxrSess.drawn[drawKey] = true;
                 const endT = time(1);
 
                 if (inputs.showBox) {
@@ -243,7 +228,7 @@ onTick = (length, _moment, _, ta, inputs) => {
                 }
             }
 
-            liveSessions[d.key] = null;
+            fxrSess.live[d.key] = null;
         }
     }
 };
