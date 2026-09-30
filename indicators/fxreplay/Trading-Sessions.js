@@ -44,9 +44,11 @@ init = () => {
     input.bool('Rellenar la caja', false, 'fillBox', undefined, gS);
     input.int('Transparencia del relleno', 92, 'fillTransp', 50, 99, 1,
         'Mas alto = mas transparente.', gS);
-    input.str('Borde de la caja', 'Punteado', 'borderStyle',
-        ['Solido', 'Punteado', 'Rayado'], undefined, gS);
     input.bool('Lineas de alto y bajo', true, 'showLevels', undefined, gS);
+    input.str('Estilo de las lineas', 'Punteado', 'borderStyle',
+        ['Solido', 'Punteado', 'Rayado'],
+        'El borde de la caja es siempre solido: rectangle() no acepta estilo de linea.',
+        gS);
     input.bool('Proyectar las lineas hacia adelante', false, 'extendLevels',
         'Las extiende hasta el borde derecho. Sin limite, asi que con varias sesiones ensucia.',
         gS);
@@ -124,7 +126,9 @@ onTick = (length, _moment, _, ta, inputs) => {
 
     // --- ESTILO ---
 
-    const borderStyle = inputs.borderStyle === 'Solido' ? 0
+    // 0 solida, 1 punteada, 2 rayada. Solo vale para trendLine: el estilo de
+    // linea no existe entre las propiedades de rectangle().
+    const lineDash = inputs.borderStyle === 'Solido' ? 0
         : inputs.borderStyle === 'Punteado' ? 1
         : 2;
 
@@ -175,7 +179,6 @@ onTick = (length, _moment, _, ta, inputs) => {
                 fillBackground: inputs.fillBox,
                 transparency: inputs.fillTransp,
                 linewidth: 1,
-                linestyle: borderStyle,
                 extendRight: false,
                 showLabel: inputs.showLabel,
                 textColor: d.col,
@@ -187,7 +190,7 @@ onTick = (length, _moment, _, ta, inputs) => {
             const lineStyle = {
                 linecolor: d.col,
                 linewidth: 1,
-                linestyle: 1,
+                linestyle: lineDash,
                 extendRight: inputs.extendLevels
             };
             trendLine(newPoint(startT, hi), newPoint(endT, hi), lineStyle);
