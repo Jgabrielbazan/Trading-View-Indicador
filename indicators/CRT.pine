@@ -88,15 +88,15 @@ type Setup
     bool  done   = false
     float target = na
     float stop   = na
-    box   bx     = na
-    line  tgtLn  = na
-    line  entLn  = na
-    line  stpLn  = na
-    line  swLn   = na
-    label la     = na
-    label lm     = na
-    label ld     = na
-    label lrr    = na
+    box   bx
+    line  tgtLn
+    line  entLn
+    line  stpLn
+    line  swLn
+    label la
+    label lm
+    label ld
+    label lrr
 
 killSetup(Setup s) =>
     if not na(s.bx)
@@ -334,11 +334,8 @@ else
 // ============================================================================
 // plotshape y alertcondition solo funcionan en scope global.
 
-// display.pane evita que el 0/1 de la senal aparezca en la linea de estado.
-plotshape(showMark and sigBull, "CRT alcista", shape.triangleup, location.belowbar, bullCol,
-     size = size.tiny, display = display.pane)
-plotshape(showMark and sigBear, "CRT bajista", shape.triangledown, location.abovebar, bearCol,
-     size = size.tiny, display = display.pane)
+plotshape(showMark and sigBull, "CRT alcista", shape.triangleup, location.belowbar, bullCol, size = size.tiny)
+plotshape(showMark and sigBear, "CRT bajista", shape.triangledown, location.abovebar, bearCol, size = size.tiny)
 
 alertcondition(sigBull, "CRT alcista", "CRT alcista: barrida del bajo del rango y cierre de vuelta adentro")
 alertcondition(sigBear, "CRT bajista", "CRT bajista: barrida del alto del rango y cierre de vuelta adentro")
@@ -391,6 +388,7 @@ if badTF and barstate.islast
              size = size.small)
     else
         label.set_xy(warn, bar_index, high)
-else if not na(warn)
+
+if not badTF and not na(warn)
     label.delete(warn)
     warn := na
